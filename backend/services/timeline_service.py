@@ -7,8 +7,9 @@ logger = logging.getLogger(__name__)
 
 def _parse_and_normalize_date(date_str: Optional[str]) -> Tuple[Optional[str], Optional[datetime]]:
     """
-    Attempts to parse date strings into ISO YYYY-MM-DD format and datetime object.
+    Attempts to parse date strings into normalized ISO date/timestamp format and datetime object.
     Returns (normalized_date_str, datetime_obj) or (None, None) if missing/invalid.
+    Preserves exact timestamp when available (e.g. 2026-08-02T14:30:00Z).
     """
     if not date_str or not isinstance(date_str, str):
         return None, None
@@ -17,19 +18,29 @@ def _parse_and_normalize_date(date_str: Optional[str]) -> Tuple[Optional[str], O
     if cleaned_str.lower() in ["null", "none", "n/a", "unknown", ""]:
         return None, None
 
-    # Try python-dateutil parser if available
     try:
         from dateutil import parser
         dt = parser.parse(cleaned_str, fuzzy=True)
-        return dt.strftime("%Y-%m-%d"), dt
+        # Check if time component is specified
+        has_time = any(c in cleaned_str for c in [":", "T", "t"]) or (dt.hour != 0 or dt.minute != 0 or dt.second != 0)
+        if has_time:
+            if dt.tzinfo:
+                norm_str = dt.isoformat()
+            else:
+                norm_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ") if "utc" in cleaned_str.lower() or "z" in cleaned_str.lower() else dt.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            norm_str = dt.strftime("%Y-%m-%d")
+        return norm_str, dt
     except Exception:
         pass
 
     # Standard strftime format fallbacks
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y", "%b %d, %Y", "%B %d, %Y"):
+    for fmt in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d %H:%M:%S", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d", "%d-%m-%Y", "%b %d, %Y", "%B %d, %Y"):
         try:
             dt = datetime.strptime(cleaned_str, fmt)
-            return dt.strftime("%Y-%m-%d"), dt
+            has_time = "%H" in fmt
+            norm_str = dt.strftime("%Y-%m-%dT%H:%M:%SZ" if has_time else "%Y-%m-%d")
+            return norm_str, dt
         except ValueError:
             continue
 
@@ -40,9 +51,9 @@ def build_timeline(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Responsibilities:
     - Accept events from extract_events().
-    - Normalize event dates where possible into YYYY-MM-DD format.
-    - Sort events chronologically.
-    - Preserve event IDs, document/source references.
+    - Normalize event dates where possible into YYYY-MM-DD or ISO timestamp format.
+    - Sort events chronologically by parsed datetime.
+    - Preserve event IDs, document/source references, confidence.
     - Handle missing or invalid dates safely without crashing (place them at the end).
     - Do not invent dates.
     """
@@ -77,7 +88,7 @@ def build_timeline(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         else:
             undated_events.append(timeline_item)
 
-    # Sort dated events chronologically
+    # Sort dated events chronologically by datetime object
     dated_events.sort(key=lambda x: x[0])
     sorted_dated = [item[1] for item in dated_events]
 

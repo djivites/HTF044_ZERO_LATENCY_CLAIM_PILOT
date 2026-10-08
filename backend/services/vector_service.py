@@ -28,38 +28,57 @@ def _get_embedding(text: str) -> List[float]:
     """
     Generate vector embedding using HuggingFace API (if API key provided),
     sentence-transformers locally, or a deterministic hash fallback.
+    Dimension MUST match settings.PINECONE_DIMENSION (default 1024).
     """
     global _embedding_model_instance
+    target_dim = settings.PINECONE_DIMENSION  # 1024
+
     if not text:
-        return [0.0] * 384
+        return [0.0] * target_dim
 
     # 1. Try Hugging Face Inference API if HUGGINGFACE_API_KEY is set
     hf_api_key = settings.HUGGINGFACE_API_KEY
     if hf_api_key:
         try:
             import requests
-            model_name = settings.HUGGINGFACE_EMBEDDING_MODEL or "sentence-transformers/all-MiniLM-L6-v2"
+            model_name = settings.HUGGINGFACE_EMBEDDING_MODEL or "BAAI/bge-large-en-v1.5"
             url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_name}"
             headers = {"Authorization": f"Bearer {hf_api_key}"}
-            response = requests.post(url, headers=headers, json={"inputs": text, "options": {"wait_for_model": True}}, timeout=10)
-            
+            response = requests.post(
+                url, headers=headers,
+                json={"inputs": text, "options": {"wait_for_model": True}},
+                timeout=30
+            )
+
             if response.status_code == 200:
                 data = response.json()
-                # API returns list of floats or list of token vectors
-                if isinstance(data, list):
-                    if len(data) > 0 and isinstance(data[0], list):
-                        # Mean pooling over token embeddings
-                        token_vecs = data[0]
-                        dim = len(token_vecs[0]) if isinstance(token_vecs[0], list) else len(token_vecs)
-                        if isinstance(token_vecs[0], list):
-                            avg_vec = [sum(col) / len(token_vecs) for col in zip(*token_vecs)]
-                            return avg_vec
-                        return token_vecs
+                vec = None
+                if isinstance(data, list) and len(data) > 0:
+                    if isinstance(data[0], list):
+                        # Nested: [[token_vecs...]] — mean-pool the innermost list
+                        inner = data[0]
+                        if isinstance(inner[0], list):
+                            # shape: [[d1, d2, ...], [d1, d2, ...], ...] — mean pool
+                            vec = [sum(col) / len(inner) for col in zip(*inner)]
+                        else:
+                            # shape: [d1, d2, ...] — already a sentence vector
+                            vec = inner
                     elif isinstance(data[0], (int, float)):
-                        return data
-                logger.info("Successfully fetched embedding from HuggingFace API")
+                        # shape: [d1, d2, ...] — flat sentence vector
+                        vec = data
+
+                if vec is not None and len(vec) == target_dim:
+                    logger.info(f"HuggingFace API embedding OK — dim={len(vec)}")
+                    return [float(v) for v in vec]
+                elif vec is not None:
+                    logger.warning(
+                        f"HuggingFace API returned dim={len(vec)}, expected {target_dim}. "
+                        f"Falling back to local model."
+                    )
             else:
-                logger.warning(f"HuggingFace API returned status code {response.status_code}: {response.text}")
+                logger.warning(
+                    f"HuggingFace API status {response.status_code}: {response.text[:200]}"
+                )
         except Exception as e:
             logger.warning(f"HuggingFace API call failed: {e}. Falling back to local model.")
 
@@ -67,32 +86,63 @@ def _get_embedding(text: str) -> List[float]:
     try:
         if _embedding_model_instance is None:
             from sentence_transformers import SentenceTransformer
-            logger.info(f"Loading embedding model: {settings.EMBEDDING_MODEL_NAME}")
+            logger.info(f"Loading local embedding model: {settings.EMBEDDING_MODEL_NAME}")
             _embedding_model_instance = SentenceTransformer(settings.EMBEDDING_MODEL_NAME)
-        
+
         embedding = _embedding_model_instance.encode(text).tolist()
+        if len(embedding) != target_dim:
+            logger.warning(
+                f"Local model produced dim={len(embedding)}, expected {target_dim}. "
+                f"Check EMBEDDING_MODEL_NAME in config."
+            )
         return embedding
     except Exception as e:
-        logger.warning(f"SentenceTransformer embedding generation failed: {e}. Using deterministic hash vector fallback.")
-        import hashlib
-        h = hashlib.sha256(text.encode('utf-8')).digest()
-        floats = []
-        for i in range(384):
-            byte_val = h[i % len(h)]
-            floats.append((byte_val / 127.5) - 1.0)
-        return floats
+        logger.warning(f"SentenceTransformer failed: {e}. Using deterministic hash fallback.")
+
+    # 3. Deterministic hash fallback (last resort — dimension matches Pinecone)
+    import hashlib
+    h = hashlib.sha256(text.encode('utf-8')).digest()
+    floats = []
+    for i in range(target_dim):
+        byte_val = h[i % len(h)]
+        floats.append((byte_val / 127.5) - 1.0)
+    logger.warning(f"Using hash fallback embedding (dim={target_dim}). Results will NOT be semantically meaningful.")
+    return floats
 
 
 def _get_pinecone_index():
-    """Get Pinecone index instance if PINECONE_API_KEY is configured."""
+    """Get or auto-create Pinecone index instance if PINECONE_API_KEY is configured."""
     api_key = settings.PINECONE_API_KEY
     if not api_key:
         return None
 
     try:
-        from pinecone import Pinecone
+        from pinecone import Pinecone, ServerlessSpec
         pc = Pinecone(api_key=api_key)
         index_name = settings.PINECONE_INDEX_NAME or "claimpilot-index"
+        
+        # Check if index exists; create serverless index if it doesn't exist yet
+        try:
+            existing_indexes = [idx.name for idx in pc.list_indexes()]
+        except Exception:
+            existing_indexes = []
+
+        if index_name not in existing_indexes:
+            dim = settings.PINECONE_DIMENSION  # 1024
+            logger.info(f"Creating Pinecone index '{index_name}' with {dim} dimensions...")
+            try:
+                pc.create_index(
+                    name=index_name,
+                    dimension=dim,
+                    metric="cosine",
+                    spec=ServerlessSpec(
+                        cloud="aws",
+                        region=settings.PINECONE_ENVIRONMENT or "us-east-1"
+                    )
+                )
+            except Exception as create_err:
+                logger.warning(f"Note on Pinecone index creation for '{index_name}': {create_err}")
+
         index = pc.Index(index_name)
         return index
     except Exception as e:

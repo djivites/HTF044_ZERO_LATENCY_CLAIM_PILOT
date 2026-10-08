@@ -1,7 +1,34 @@
+import re
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Set
 
 logger = logging.getLogger(__name__)
+
+STOP_WORDS: Set[str] = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he", "in",
+    "is", "it", "its", "of", "on", "that", "the", "to", "was", "were", "will", "with",
+    "there", "no", "or", "been", "this", "during", "which", "official", "reported"
+}
+
+
+def _extract_keywords(text: str) -> Set[str]:
+    """Extract significant keywords from text for semantic matching."""
+    if not text:
+        return set()
+    words = re.findall(r"\b[a-zA-Z0-9]{3,}\b", text.lower())
+    return {w for w in words if w not in STOP_WORDS}
+
+
+def _are_texts_related(text1: str, text2: str, min_shared: int = 1) -> bool:
+    """
+    Determines if two text items are semantically related based on keyword overlap.
+    """
+    kw1 = _extract_keywords(text1)
+    kw2 = _extract_keywords(text2)
+    if not kw1 or not kw2:
+        return False
+    shared = kw1.intersection(kw2)
+    return len(shared) >= min_shared
 
 
 def create_evidence_graph(
@@ -12,7 +39,7 @@ def create_evidence_graph(
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Accepts structured data produced by document_service and gemma_service.
-    Constructs an evidence graph representing Nodes and Relationships.
+    Constructs a precise, non-redundant evidence graph representing Nodes and Relationships.
 
     Nodes:
       - Document
@@ -24,15 +51,15 @@ def create_evidence_graph(
       - DOCUMENT_CONTAINS_CLAIM
       - DOCUMENT_CONTAINS_EVIDENCE
       - DOCUMENT_CONTAINS_EVENT
-      - CLAIM_SUPPORTED_BY_EVIDENCE
-      - CLAIM_ASSOCIATED_WITH_EVENT
-      - EVIDENCE_ASSOCIATED_WITH_EVENT
+      - CLAIM_SUPPORTED_BY_EVIDENCE (only when evidence relates to claim)
+      - CLAIM_ASSOCIATED_WITH_EVENT (only when claim relates to event)
+      - EVIDENCE_ASSOCIATED_WITH_EVENT (only when evidence relates to event)
     """
     nodes_map: Dict[str, Dict[str, Any]] = {}
     relationships: List[Dict[str, Any]] = []
     seen_rel_keys = set()
 
-    # Normalize processed_document input (can be single doc dict or list of doc dicts)
+    # Normalize processed_document input
     doc_list: List[Dict[str, Any]] = []
     if processed_document:
         if isinstance(processed_document, dict):
@@ -69,7 +96,6 @@ def create_evidence_graph(
                 "source": claim.get("source")
             }
 
-            # Create document node if missing but referenced
             if doc_id and doc_id not in nodes_map:
                 nodes_map[doc_id] = {
                     "id": doc_id,
@@ -153,57 +179,71 @@ def create_evidence_graph(
                         "type": "DOCUMENT_CONTAINS_EVENT"
                     })
 
-    # 5. Connect CLAIM_SUPPORTED_BY_EVIDENCE
-    # Link claims and evidence from the same document/source or shared context
+    # 5. Connect CLAIM_SUPPORTED_BY_EVIDENCE (only when evidence relates to claim)
     for claim in claims_list:
         claim_id = claim.get("claim_id")
         c_doc = claim.get("document_id")
+        c_text = str(claim.get("claim", ""))
+
         for ev in evidence_list:
             ev_id = ev.get("evidence_id")
             e_doc = ev.get("document_id")
-            if claim_id and ev_id and c_doc and e_doc and c_doc == e_doc:
-                rel_key = (claim_id, ev_id, "CLAIM_SUPPORTED_BY_EVIDENCE")
-                if rel_key not in seen_rel_keys:
-                    seen_rel_keys.add(rel_key)
-                    relationships.append({
-                        "source": claim_id,
-                        "target": ev_id,
-                        "type": "CLAIM_SUPPORTED_BY_EVIDENCE"
-                    })
+            e_text = str(ev.get("text", ""))
 
-    # 6. Connect CLAIM_ASSOCIATED_WITH_EVENT
+            if claim_id and ev_id and c_doc and e_doc and c_doc == e_doc:
+                if _are_texts_related(c_text, e_text, min_shared=1):
+                    rel_key = (claim_id, ev_id, "CLAIM_SUPPORTED_BY_EVIDENCE")
+                    if rel_key not in seen_rel_keys:
+                        seen_rel_keys.add(rel_key)
+                        relationships.append({
+                            "source": claim_id,
+                            "target": ev_id,
+                            "type": "CLAIM_SUPPORTED_BY_EVIDENCE"
+                        })
+
+    # 6. Connect CLAIM_ASSOCIATED_WITH_EVENT (only when claim relates to event)
     for claim in claims_list:
         claim_id = claim.get("claim_id")
         c_doc = claim.get("document_id")
+        c_text = str(claim.get("claim", ""))
+
         for event in events_list:
             event_id = event.get("event_id")
             ev_doc = event.get("document_id")
-            if claim_id and event_id and c_doc and ev_doc and c_doc == ev_doc:
-                rel_key = (claim_id, event_id, "CLAIM_ASSOCIATED_WITH_EVENT")
-                if rel_key not in seen_rel_keys:
-                    seen_rel_keys.add(rel_key)
-                    relationships.append({
-                        "source": claim_id,
-                        "target": event_id,
-                        "type": "CLAIM_ASSOCIATED_WITH_EVENT"
-                    })
+            evt_text = str(event.get("event", ""))
 
-    # 7. Connect EVIDENCE_ASSOCIATED_WITH_EVENT
+            if claim_id and event_id and c_doc and ev_doc and c_doc == ev_doc:
+                if _are_texts_related(c_text, evt_text, min_shared=2):
+                    rel_key = (claim_id, event_id, "CLAIM_ASSOCIATED_WITH_EVENT")
+                    if rel_key not in seen_rel_keys:
+                        seen_rel_keys.add(rel_key)
+                        relationships.append({
+                            "source": claim_id,
+                            "target": event_id,
+                            "type": "CLAIM_ASSOCIATED_WITH_EVENT"
+                        })
+
+    # 7. Connect EVIDENCE_ASSOCIATED_WITH_EVENT (only when evidence relates to event)
     for ev in evidence_list:
         ev_id = ev.get("evidence_id")
         e_doc = ev.get("document_id")
+        e_text = str(ev.get("text", ""))
+
         for event in events_list:
             event_id = event.get("event_id")
             ev_doc = event.get("document_id")
+            evt_text = str(event.get("event", ""))
+
             if ev_id and event_id and e_doc and ev_doc and e_doc == ev_doc:
-                rel_key = (ev_id, event_id, "EVIDENCE_ASSOCIATED_WITH_EVENT")
-                if rel_key not in seen_rel_keys:
-                    seen_rel_keys.add(rel_key)
-                    relationships.append({
-                        "source": ev_id,
-                        "target": event_id,
-                        "type": "EVIDENCE_ASSOCIATED_WITH_EVENT"
-                    })
+                if _are_texts_related(e_text, evt_text, min_shared=2):
+                    rel_key = (ev_id, event_id, "EVIDENCE_ASSOCIATED_WITH_EVENT")
+                    if rel_key not in seen_rel_keys:
+                        seen_rel_keys.add(rel_key)
+                        relationships.append({
+                            "source": ev_id,
+                            "target": event_id,
+                            "type": "EVIDENCE_ASSOCIATED_WITH_EVENT"
+                        })
 
     return {
         "nodes": list(nodes_map.values()),

@@ -8,13 +8,15 @@ load_dotenv()
 class Settings:
     # Gemma AI configuration
     GEMMA_API_KEY: str = os.getenv("GEMMA_API_KEY", "")
-    GEMMA_MODEL_NAME: str = os.getenv("GEMMA_MODEL_NAME", "gemma-2-9b-it")
+    GEMMA_MODEL_NAME: str = os.getenv("GEMMA_MODEL_NAME", "gemma-4-31b-it")
     GEMMA_API_URL: Optional[str] = os.getenv("GEMMA_API_URL", None)
 
     # Embedding & Vector Database configuration
-    EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
+    # 1024-dim model matching the Pinecone index dimension
+    EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-large-en-v1.5")
     HUGGINGFACE_API_KEY: str = os.getenv("HUGGINGFACE_API_KEY", "")
-    HUGGINGFACE_EMBEDDING_MODEL: str = os.getenv("HUGGINGFACE_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    HUGGINGFACE_EMBEDDING_MODEL: str = os.getenv("HUGGINGFACE_EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+    PINECONE_DIMENSION: int = int(os.getenv("PINECONE_DIMENSION", "1024"))
     PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
     PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "claimpilot-index")
     PINECONE_ENVIRONMENT: str = os.getenv("PINECONE_ENVIRONMENT", "us-east-1")

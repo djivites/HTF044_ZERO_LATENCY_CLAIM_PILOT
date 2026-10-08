@@ -5,12 +5,14 @@
 
 ## Team
 
-**Team Name:** ClaimPilot Team
+**Team Name:** Zero Latency
 
-| Member | Contribution |
-| ------ | ------------ |
-| Team Member 1 | Frontend Architecture, Interactive Evidence Graph, UI Design System |
-| Team Member 2 | Backend API Development, Document Extraction Pipeline, AI Services |
+| Member | Role | Contribution |
+| ------ | ---- | ------------ |
+| **Jivites D** | Team Lead & Backend Architect | Backend pipeline design, AI/Gemma integration, Pinecone vector storage |
+| **Sriram** | Frontend Developer | React UI, Evidence Graph visualisation, interactive case dashboard |
+| **Prajit** | AI & Data Engineer | Claim/evidence/event extraction, contradiction detection, evidence scoring |
+| **Sukanthan** | Full-Stack & DevOps | FastAPI REST endpoints, document ingestion pipeline, deployment & testing |
 
 ---
 

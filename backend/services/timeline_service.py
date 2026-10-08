@@ -88,8 +88,17 @@ def build_timeline(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         else:
             undated_events.append(timeline_item)
 
-    # Sort dated events chronologically by datetime object
-    dated_events.sort(key=lambda x: x[0])
+    # Sort dated events chronologically. Strip timezone info first so offset-naive
+    # and offset-aware datetimes (e.g. "2026-08-02" vs "2026-08-02T14:30:00Z") can
+    # be compared safely without a TypeError.
+    def _sort_key(entry):
+        dt = entry[0]
+        if dt.tzinfo is not None:
+            from datetime import timezone
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+
+    dated_events.sort(key=_sort_key)
     sorted_dated = [item[1] for item in dated_events]
 
     # Combine sorted dated events followed by undated/invalid-date events

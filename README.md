@@ -76,8 +76,16 @@ graph TD
 | -------- | ------------ |
 | Frontend | React 18, Vite, JavaScript, responsive CSS |
 | Backend | Python (FastAPI / Uvicorn), Pydantic schemas in `backend/` |
-| Analysis | Gemma-backed extraction with rule-based extraction fallback; deterministic evidence graph and scoring services |
-| Data Contract | REST API under `/api/v1`; explicit sample cases remain available in the frontend |
+| AI Model | Google Gemma (`gemma-4-31b-it`) via Google AI Studio API |
+| Vector DB | Pinecone (1024-dim cosine index) |
+| Embeddings | `BAAI/bge-large-en-v1.5` (1024-dim sentence embeddings) |
+| Data Contract | REST API under `/api/v1` |
+
+### AI / Models
+
+| Model | How it is used |
+| ----- | -------------- |
+| **Gemma (`gemma-4-31b-it`)** | **Primary extraction model — used standalone for all AI tasks.** Receives processed document text and returns structured JSON for: (1) factual **claim extraction**, (2) physical **evidence extraction**, and (3) real-world **event extraction** with timestamps. No other LLM or generative model is used. Rule-based fallback is only invoked when the Gemma API is explicitly unavailable. |
 
 ---
 
@@ -125,6 +133,72 @@ Document text extraction currently supports PDF, DOCX, TXT, Markdown and JSON. C
 
 ## Credits and License
 
-- **Fonts:** Google Fonts (Inter)
-- **Icons:** Custom SVG icon set
-- **License:** MIT License
+### Credits
+
+#### AI / Models
+| Resource | Role |
+| -------- | ---- |
+| [Google Gemma `gemma-4-31b-it`](https://ai.google.dev/) via Google AI Studio | Primary AI extraction model
+
+#### APIs & Services
+| Resource | Role |
+| -------- | ---- |
+| [Pinecone](https://www.pinecone.io/) | Vector database for semantic search (1024-dim cosine index) |
+| [Google AI Studio](https://aistudio.google.com/) | Gemma API endpoint |
+| [Hugging Face Inference API](https://huggingface.co/inference-api) | Optional hosted embedding inference |
+
+#### Backend Libraries
+| Library | Role |
+| ------- | ---- |
+| [FastAPI](https://fastapi.tiangolo.com/) | REST API framework |
+| [Uvicorn](https://www.uvicorn.org/) | ASGI server |
+| [Pydantic](https://docs.pydantic.dev/) | Data validation and schema models |
+| [google-genai](https://pypi.org/project/google-genai/) | Google GenAI SDK for Gemma API calls |
+| [pinecone](https://github.com/pinecone-io/pinecone-python-client) | Pinecone Python SDK |
+| [sentence-transformers](https://www.sbert.net/) | Local embedding model inference |
+| [pypdf](https://pypdf.readthedocs.io/) | PDF text extraction |
+| [python-docx](https://python-docx.readthedocs.io/) | DOCX text extraction |
+| [python-dateutil](https://dateutil.readthedocs.io/) | Robust date/timestamp parsing |
+| [rapidfuzz](https://github.com/maxbachmann/RapidFuzz) | Fuzzy string matching for contradiction detection |
+| [python-dotenv](https://pypi.org/project/python-dotenv/) | `.env` configuration loading |
+| [pytest](https://docs.pytest.org/) / [httpx](https://www.python-httpx.org/) | Backend testing |
+
+#### Frontend Libraries
+| Library | Role |
+| ------- | ---- |
+| [React 18](https://react.dev/) | UI component framework |
+| [Vite](https://vitejs.dev/) | Frontend build tool and dev server |
+| [Google Fonts — Inter](https://fonts.google.com/specimen/Inter) | Typography |
+
+#### Built at
+Built during **Hacktoberfest Hack Day — Coimbatore 2026**, organized by INIT CLUB × iDEA CLUB in collaboration with [Major League Hacking (MLH)](https://mlh.io/).
+
+---
+
+### License
+
+This project is licensed under the **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2026 Zero Latency Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

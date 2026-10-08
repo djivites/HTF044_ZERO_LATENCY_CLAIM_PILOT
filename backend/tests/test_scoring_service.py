@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import random
 from decimal import Decimal
 
@@ -20,6 +21,7 @@ from backend.models.schemas import (
     RuleResult,
     ScoreResult,
 )
+from backend.services.response_service import LetterContext, generate_response, validate_letter
 from backend.services.scoring_service import (
     CHECKLISTS,
     ChecklistResult,
@@ -204,6 +206,112 @@ def test_missing_evidence_no_documents_and_failed_document():
     docs = [make_document("D1", "invoice", "failed")]
     checklist = evaluate_checklist("warranty", docs, [])
     assert "proof_of_purchase" not in checklist.covered_keys
+
+
+def test_validate_letter_requires_citations_for_model_draft():
+    ctx = LetterContext(
+        eligible_ids={"F1"},
+        allowed_day_months={(12, 3)},
+        allowed_amounts=set(),
+        allowed_quotes=["Verified quote text"],
+        is_model_draft=True,
+    )
+    draft = {
+        "subject": "Request for review of claim decision",
+        "paragraphs": ["I am writing to request a review of the decision."],
+        "requests": ["Please review the documents and reply in writing."],
+        "cited_finding_ids": [],
+    }
+    violations = validate_letter(draft, ctx)
+    assert any("cited_finding_ids" in violation for violation in violations)
+
+
+def test_validate_letter_accepts_day_month_dates_without_year_when_in_context():
+    ctx = LetterContext(
+        eligible_ids={"F1"},
+        allowed_day_months={(12, 3)},
+        allowed_dates=set(),
+        allowed_amounts=set(),
+        allowed_quotes=[],
+        is_model_draft=True,
+    )
+    draft = {
+        "subject": "Request for review of claim decision",
+        "paragraphs": ["The complaint was first raised on 12 March."],
+        "requests": ["Please review the decision and then reply in writing."],
+        "cited_finding_ids": ["F1"],
+    }
+    violations = validate_letter(draft, ctx)
+    assert not any("date not in facts" in violation for violation in violations)
+
+
+def test_validate_letter_enforces_80_to_300_words_for_model_drafts():
+    ctx = LetterContext(
+        eligible_ids={"F1"},
+        allowed_day_months=set(),
+        allowed_amounts=set(),
+        allowed_quotes=[],
+        is_model_draft=True,
+    )
+    short = {
+        "subject": "Request for review of claim decision",
+        "paragraphs": [" ".join(["word"] * 79)],
+        "requests": ["Please review the documents."],
+        "cited_finding_ids": ["F1"],
+    }
+    long = {
+        "subject": "Request for review of claim decision",
+        "paragraphs": [" ".join(["word"] * 301)],
+        "requests": ["Please review the documents."],
+        "cited_finding_ids": ["F1"],
+    }
+    assert any("length out of range" in violation for violation in validate_letter(short, ctx))
+    assert any("length out of range" in violation for violation in validate_letter(long, ctx))
+
+
+def test_validate_letter_rejects_facts_in_subject_line():
+    ctx = LetterContext(
+        eligible_ids={"F1"},
+        allowed_day_months={(12, 3)},
+        allowed_amounts={Decimal("1234.56")},
+        allowed_quotes=[],
+        is_model_draft=True,
+    )
+    draft = {
+        "subject": "Claim review dated 12 March 2024 for Rs. 1234.56",
+        "paragraphs": ["I am requesting a review of the decision."],
+        "requests": ["Please review the documents."],
+        "cited_finding_ids": ["F1"],
+    }
+    violations = validate_letter(draft, ctx)
+    assert any("subject" in violation.lower() for violation in violations)
+
+
+def test_generate_response_handles_malformed_llm_output_and_subject_facts():
+    class MalformedLLM:
+        async def generate_json(self, model_cls, **kwargs):
+            return {"subject": "Request for review of claim rejected on 12 March 2024"}
+
+    case = CaseAnalysis(
+        case_id="C-1",
+        documents=[make_document("D1", "invoice")],
+        claims=[Claim(id="C1", source_doc_id="D1", page=1, speaker="company", kind="denial", text="not covered", quote="not covered", quote_verified=True)],
+        contradictions=[
+            Finding(
+                id="F1",
+                finding_type="contradiction",
+                source="model_verified",
+                severity="high",
+                favors="neutral",
+                explanation="The rejection is inconsistent with the purchase record.",
+                quotes=[QuoteRef(doc_id="D1", page=1, quote="Purchased on 12 March 2024", verified=True)],
+                left_item_id="C1",
+            )
+        ],
+    )
+    result = asyncio.run(generate_response(case, llm=MalformedLLM(), recipient_name="Customer Support"))
+    assert result.used_model is False
+    assert any("The language model was unavailable" in warning for warning in result.warnings)
 
 
 if __name__ == "__main__":

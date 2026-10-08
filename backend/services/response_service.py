@@ -171,6 +171,30 @@ def _collect_allowed_amounts(case: CaseAnalysis, selected_ids: set[str]) -> set[
     return amounts
 
 
+def _collect_allowed_day_months(case: CaseAnalysis, selected_ids: set[str]) -> set[tuple[int, int]]:
+    pairs: set[tuple[int, int]] = set()
+    for event in case.events:
+        if event.quote_verified:
+            if event.date is not None:
+                pairs.add((event.date.day, event.date.month))
+            for day, month, year, _ in _extract_dates(event.date_text or event.quote or ""):
+                if year is None and month and day:
+                    pairs.add((day, month))
+    for item in list(case.claims) + list(case.evidence):
+        if getattr(item, "quote_verified", False):
+            for day, month, year, _ in _extract_dates(item.quote):
+                if year is None and month and day:
+                    pairs.add((day, month))
+    for finding in case.contradictions:
+        if finding.id in selected_ids:
+            for quote in finding.quotes:
+                if quote.verified:
+                    for day, month, year, _ in _extract_dates(quote.quote):
+                        if year is None and month and day:
+                            pairs.add((day, month))
+    return pairs
+
+
 def _coerce_letter_draft(value: object) -> "LetterDraft":
     if isinstance(value, dict):
         return LetterDraft(
@@ -203,11 +227,10 @@ def validate_letter(draft: "LetterDraft", ctx: LetterContext) -> list[str]:
 
     cited = draft.get("cited_finding_ids", []) or []
     eligible = ctx.eligible_ids
+    if ctx.is_model_draft and not cited:
+        violations.append("cited_finding_ids are required for model-generated drafts")
     if cited and not set(cited).issubset(eligible):
-        violations.append("cited_finding_ids must be a non-empty subset of the provided findings")
-    if cited and not cited:
-        if ctx.require_requests:
-            pass
+        violations.append("cited_finding_ids must be a subset of the provided findings")
 
     if not all(p.strip() for p in draft.get("paragraphs", [])):
         violations.append("2 to 5 paragraphs required")
@@ -227,7 +250,7 @@ def validate_letter(draft: "LetterDraft", ctx: LetterContext) -> list[str]:
             if candidate not in ctx.allowed_dates:
                 violations.append(f"date not in facts: {original}")
         else:
-            pair = (month, day)
+            pair = (day, month)
             if pair not in ctx.allowed_day_months:
                 violations.append(f"date not in facts: {original}")
 
@@ -258,11 +281,16 @@ def validate_letter(draft: "LetterDraft", ctx: LetterContext) -> list[str]:
     for word in re.findall(r"\b[A-Z]{5,}\b", text):
         violations.append(f"tone: all-caps word {word}")
 
-    combined = " ".join(draft.get("paragraphs", []) + draft.get("requests", []))
+    subject = str(draft.get("subject", "")).strip()
+    if subject:
+        subject_dates = _extract_dates(subject)
+        subject_amounts = _extract_amounts(subject)
+        if subject_dates or subject_amounts or re.search(r'["“].+?["”]', subject):
+            violations.append("subject must stay generic; do not repeat case facts, dates, amounts or quoted evidence in the subject line")
+
+    combined = " ".join(draft.get("paragraphs", []))
     word_count = len(re.findall(r"\b\w+\b", combined))
-    if word_count > 350:
-        violations.append("length out of range")
-    if ctx.is_model_draft and word_count < 60:
+    if ctx.is_model_draft and (word_count < 80 or word_count > 300):
         violations.append("length out of range")
 
     overstatement = re.compile(r"\bclearly\b|\bobviously\b|\bundeniabl\w*\b|\bproves?\b|\bproof that\b|\bguilty\b|\bwithout a doubt\b", flags=re.IGNORECASE)
@@ -335,6 +363,7 @@ def _build_context(case: CaseAnalysis, selected_findings: list[Finding]) -> Lett
             if q.verified:
                 for amount, _ in _extract_amounts(q.quote):
                     allowed_amounts.add(amount)
+    allowed_day_months = _collect_allowed_day_months(case, selected_ids)
     return LetterContext(
         eligible_ids=selected_ids,
         allowed_dates=allowed_dates,
@@ -417,7 +446,7 @@ async def generate_response(
     warnings: list[str] = []
     eligible_findings = []
     for finding in sorted(getattr(case, "contradictions", []) or [], key=lambda f: (SEVERITY_RANK.get(f.severity, 2), calculate_evidence_strength(f, case.documents), f.id)):
-        if not _is_verified(finding):
+        if not finding.quotes or not any(q.verified for q in finding.quotes):
             continue
         if finding.finding_type not in {"contradiction", "unsupported_claim", "date_mismatch", "amount_mismatch", "sequence_anomaly", "window_check"}:
             continue
@@ -540,7 +569,8 @@ Rules:
             break
         except Exception as exc:  # pragma: no cover - guarded by tests
             logger.warning("Letter generation failed: %s", exc)
-            warnings.append("The language model was unavailable; a template letter was generated.")
+            if not any("The language model was unavailable" in w for w in warnings):
+                warnings.append("The language model was unavailable; a template letter was generated.")
             draft = None
             if attempt < MAX_LETTER_RETRIES:
                 retries += 1
@@ -549,8 +579,7 @@ Rules:
 
     if draft is None or validate_letter(draft, ctx):
         template = _template_letter(case, eligible_findings, 1, recipient_name, sender_name, tone)
-        warnings = list(dict.fromkeys(warnings + ["The language model was unavailable; a template letter was generated."])) if not warnings else list(dict.fromkeys(warnings))
-        if "The language model was unavailable; a template letter was generated." not in warnings:
+        if not any("The language model was unavailable" in w for w in warnings):
             warnings.append("The language model was unavailable; a template letter was generated.")
         full_text = _render_letter(template, recipient_name, sender_name)
         return GeneratedResponse(

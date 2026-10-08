@@ -589,6 +589,8 @@ def calculate_case_score(
         notes.append(f"{excluded} unverified finding(s) were excluded from the score.")
     if inputs["verified_claims"] == 0 or inputs["verified_evidence"] == 0:
         notes.append("Not enough verified material to judge; the score reflects neutral defaults.")
+    if not evaluated:
+        notes.append("No timeline rules were evaluated, so timeline consistency defaults to 1.0 for this score; this is an informational default, not a verified timeline finding.")
     if checklist.total == 0:
         notes.append("No checklist applied; completeness set to a neutral 0.5.")
 

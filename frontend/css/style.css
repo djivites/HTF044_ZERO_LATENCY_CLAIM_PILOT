@@ -493,11 +493,11 @@ body {
 /* Hero Visual Graphic (Animated Node & Badge Composition) */
 .hero-visual-card {
   position: relative;
-  background: #ffffff;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: var(--radius-xl);
   box-shadow: 0 25px 50px -12px rgba(99, 102, 241, 0.15);
-  padding: 36px;
+  padding: 16px;
   height: 440px;
   display: flex;
   align-items: center;
@@ -505,14 +505,29 @@ body {
   overflow: hidden;
 }
 
-.hero-visual-card::before {
-  content: '';
-  position: absolute;
-  width: 280px;
-  height: 280px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.12) 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
+.hero-graph-image {
+  display: block;
+  width: 100%;
+  max-width: 760px;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  filter: drop-shadow(0 18px 30px rgba(79, 70, 229, 0.18))
+          drop-shadow(0 0 22px rgba(59, 130, 246, 0.12));
+  animation: heroImageFloat 5s ease-in-out infinite;
+  transform-origin: center;
+  transition: transform 0.35s ease, filter 0.35s ease, box-shadow 0.35s ease;
+}
+
+.hero-graph-image:hover {
+  transform: translateY(-6px) scale(1.02);
+  filter: drop-shadow(0 24px 34px rgba(79, 70, 229, 0.24))
+          drop-shadow(0 0 28px rgba(59, 130, 246, 0.18));
+}
+
+@keyframes heroImageFloat {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-8px) scale(1.01); }
 }
 
 .hero-brain-core {

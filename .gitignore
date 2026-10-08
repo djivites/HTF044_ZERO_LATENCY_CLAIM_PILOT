@@ -153,3 +153,5 @@ out/
 .DS_Store
 >>>>>>> feature/claimpilot-core-services
 Thumbs.db
+
+powershell.cmd

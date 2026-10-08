@@ -66,36 +66,13 @@ export default function Home({ onGetStarted, onDemoCase }) {
             </div>
           </div>
 
-          {/* Visual Hero Graphic with Orbiting Badges */}
+          {/* Visual Hero Graphic */}
           <div className="hero-visual-card">
-            <div className="hero-brain-core">
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-2.04z" />
-                <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-2.04z" />
-              </svg>
-            </div>
-
-            <div className="hero-orbit-node orbit-1">
-              <span style={{ color: '#ef4444', fontWeight: 'bold' }}>📄 PDF</span> Invoice.pdf
-            </div>
-            <div className="hero-orbit-node orbit-2">
-              <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>📄 PDF</span> Warranty.pdf
-            </div>
-            <div className="hero-orbit-node orbit-3">
-              <span style={{ color: '#10b981', fontWeight: 'bold' }}>🛡️ REP</span> Repair_Report.pdf
-            </div>
-            <div className="hero-orbit-node orbit-4">
-              <span style={{ color: '#6366f1', fontWeight: 'bold' }}>✉️ EML</span> Rejection.eml
-            </div>
-
-            <div className="orbit-badge-strength">
-              <span style={{ fontSize: '0.75rem', textTransform: 'uppercase' }}>Strength</span>
-              <span style={{ fontSize: '1.15rem' }}>82%</span>
-            </div>
-
-            <div className="orbit-badge-contradiction">
-              <span>⚠️</span> 3 Contradictions Found
-            </div>
+            <img
+              src="/hero-graph.png"
+              alt="ClaimPilot evidence graph and contradictions overview"
+              className="hero-graph-image"
+            />
           </div>
         </section>
 

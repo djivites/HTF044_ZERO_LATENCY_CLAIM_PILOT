@@ -3,7 +3,17 @@
  * Seamlessly interfaces with backend endpoints with automatic fallback to mock data.
  */
 
-const API_BASE_URL = window.CLAIM_PILOT_API_URL || 'http://localhost:8000/api';
+const configuredApiUrl = window.CLAIM_PILOT_API_URL || 'http://localhost:8000';
+const API_BASE_URL = `${configuredApiUrl.replace(/\/+$/, '').replace(/\/api(?:\/v1)?$/, '')}/api/v1`;
+
+async function requestJson(path, options = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, options);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.detail || `ClaimPilot API request failed (${response.status}).`);
+  }
+  return payload;
+}
 
 // Pre-packaged realistic demo cases
 export const DEMO_CASES = {
@@ -197,77 +207,54 @@ export const ClaimPilotAPI = {
    * Create a new case
    */
   async createCase(caseData) {
-    try {
-      const response = await fetch(`${API_BASE_URL}/cases`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(caseData)
-      });
-      if (response.ok) return await response.json();
-    } catch (e) {
-      console.warn("Backend API not reachable, using local mock data fallback.", e);
-    }
-    return {
-      caseId: `case-${Date.now()}`,
-      title: caseData.title || "Laptop Warranty Claim",
-      description: caseData.description || "",
-      status: "created"
-    };
+    return requestJson('/cases/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(caseData)
+    });
   },
 
   /**
    * Upload documents to a case
    */
   async uploadDocuments(caseId, files) {
-    try {
-      const formData = new FormData();
-      files.forEach(f => formData.append('files', f));
-      const response = await fetch(`${API_BASE_URL}/cases/${caseId}/documents`, {
-        method: 'POST',
-        body: formData
-      });
-      if (response.ok) return await response.json();
-    } catch (e) {
-      console.warn("Backend API not reachable, mocking document upload.", e);
-    }
-    return { success: true, count: files.length };
+    const formData = new FormData();
+    files.forEach(file => formData.append('files', file));
+    return requestJson(`/cases/${encodeURIComponent(caseId)}/documents`, {
+      method: 'POST',
+      body: formData
+    });
+  },
+
+  async analyzeCase(caseId) {
+    return requestJson(`/cases/${encodeURIComponent(caseId)}/analyze`, { method: 'POST' });
+  },
+
+  async scoreCase(caseId) {
+    return requestJson(`/cases/${encodeURIComponent(caseId)}/score`, { method: 'POST' });
+  },
+
+  async generateCaseResponse(caseId, details) {
+    return requestJson(`/cases/${encodeURIComponent(caseId)}/response`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(details)
+    });
   },
 
   /**
    * Fetch case intelligence and graph
    */
   async getCaseAnalysis(caseId = "laptop") {
-    try {
-      const response = await fetch(`${API_BASE_URL}/cases/${caseId}/analysis`);
-      if (response.ok) return await response.json();
-    } catch (e) {
-      console.warn("Backend API offline. Serving dynamic demo case analysis.", e);
-    }
-    return DEMO_CASES[caseId] || DEMO_CASES.laptop;
+    return requestJson(`/cases/${encodeURIComponent(caseId)}`);
   },
 
   /**
    * Request response regeneration with custom tone
    */
   async generateResponse(caseId, tone = "firm") {
-    try {
-      const response = await fetch(`${API_BASE_URL}/cases/${caseId}/generate-response`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tone })
-      });
-      if (response.ok) return await response.json();
-    } catch (e) {
-      console.warn("Using offline generator for tone:", tone);
-    }
-    const current = DEMO_CASES.laptop.intelligence.generatedResponse;
-    if (tone === "formal") {
-      return { response: current.replace("Dear [Company Name]", "Attention: Formal Legal & Dispute Bureau, [Company Name]") };
-    } else if (tone === "concise") {
-      return {
-        response: `To [Company Name] Claims Team,\n\nRe: Claim #CLM-88421 Denial Contest.\n\nYour denial asserts physical impact damage. However, the Authorized Repair Report explicitly confirms: 'No external impact marks observed.' Tamper seals and outer chassis remain flawless.\n\nPlease furnish photographic evidence of internal damage or approve repair/replacement per Warranty Clause 4.2 within 5 days.\n\nRespectfully,\n[Claimant Name]`
-      };
-    }
-    return { response: current };
+    return this.generateCaseResponse(caseId, {
+      tone: tone === 'firm' ? 'firm_polite' : 'formal'
+    });
   }
 };

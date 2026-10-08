@@ -5,8 +5,105 @@ import EvidenceGraph from '../components/EvidenceGraph';
 import EvidenceList from '../components/EvidenceList';
 import Timeline from '../components/Timeline';
 import UploadBox from '../components/UploadBox';
-import { analyzeUserCase } from '../services/caseEngine';
-import { DEMO_CASES } from '../services/api';
+import { ClaimPilotAPI, DEMO_CASES } from '../services/api';
+
+function toDashboardCase(userInputs, caseId, analysisResult, scoreResult, responseResult) {
+  const stored = analysisResult.data;
+  const documents = (stored.documents || []).map((document, index) => ({
+    id: document.document_id,
+    name: document.filename,
+    size: userInputs.documents[index]?.size || '',
+    type: document.filename.split('.').pop()?.toLowerCase() || 'doc',
+    status: document.status === 'success' ? 'Analyzed' : 'Failed',
+    summary: document.metadata?.character_count
+      ? `${document.metadata.character_count} characters extracted`
+      : document.error || 'No text extracted'
+  }));
+  const claims = stored.claims || [];
+  const evidence = stored.evidence || [];
+  const findings = scoreResult.contradictions || [];
+  const contradictions = findings.map((finding, index) => {
+    const claim = claims.find(item => item.claim_id === finding.left_item_id);
+    const quote = finding.quotes?.[1];
+    const sourceDocument = documents.find(document => document.id === quote?.doc_id);
+    return {
+      id: finding.id || `finding-${index}`,
+      severity: `${finding.severity} candidate`,
+      companyClaim: {
+        source: claim?.source || finding.quotes?.[0]?.doc_id || 'Claim source',
+        statement: finding.quotes?.[0]?.quote || claim?.claim || 'Source claim'
+      },
+      evidenceFact: {
+        source: sourceDocument?.name || quote?.doc_id || 'Evidence source',
+        statement: quote?.quote || 'Source evidence'
+      },
+      explanation: finding.explanation
+    };
+  });
+  const missingEvidence = (scoreResult.missing_evidence || []).map(item => ({
+    id: item.key,
+    name: item.label,
+    priority: item.priority,
+    desc: item.why_it_matters
+  }));
+  const backendGraph = stored.graph || {};
+  const nodes = (backendGraph.nodes || []).map((node, index) => ({
+    id: node.id,
+    type: node.type === 'claim' ? 'claim' : node.type === 'evidence' ? 'report' : 'default',
+    label: node.filename || `${node.type} ${index + 1}`,
+    text: node.text || node.source || node.filename || node.type,
+    x: 40 + (index % 3) * 260,
+    y: 110 + Math.floor(index / 3) * 150,
+    color: node.type === 'claim' ? '#ef4444' : node.type === 'evidence' ? '#10b981' : '#3b82f6'
+  }));
+  const edges = (backendGraph.relationships || []).map(edge => ({
+    from: edge.source,
+    to: edge.target,
+    relation: edge.type.replaceAll('_', ' '),
+    type: edge.type.includes('CONTRADICT') ? 'contradicts' : edge.type.includes('SUPPORTED') ? 'supports' : 'related'
+  }));
+  const nodeIds = new Set(nodes.map(node => node.id));
+  findings.forEach(finding => {
+    if (finding.left_item_id && finding.right_item_id && nodeIds.has(finding.left_item_id) && nodeIds.has(finding.right_item_id)) {
+      edges.push({ from: finding.left_item_id, to: finding.right_item_id, relation: 'POTENTIAL CONFLICT', type: 'contradicts' });
+    }
+  });
+
+  return {
+    backendCaseId: caseId,
+    title: userInputs.title,
+    description: userInputs.description,
+    companyName: userInputs.companyName,
+    claimantName: userInputs.claimantName,
+    claimId: '',
+    createdAt: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    documents,
+    intelligence: {
+      strengthScore: scoreResult.score.evidence_score,
+      metrics: {
+        supporting: evidence.length,
+        company: claims.length,
+        contradictions: contradictions.length,
+        missing: missingEvidence.length
+      },
+      keyFindings: contradictions.map(item => ({ type: 'warning', text: item.explanation })),
+      timeline: (stored.timeline || []).map(item => ({
+        date: item.date || 'Date not extracted',
+        title: item.event,
+        desc: item.source || 'Source document',
+        type: 'neutral'
+      })),
+      contradictions,
+      recommendedAction: {
+        headline: 'Review the source documents and candidate findings',
+        detail: 'These automated results are extraction aids. Check each source quote before relying on it.'
+      },
+      missingEvidence,
+      generatedResponse: responseResult.full_text
+    },
+    graph: { nodes, edges }
+  };
+}
 
 /**
  * CaseAnalysis Page (Main Workspace)
@@ -33,7 +130,49 @@ export default function CaseAnalysis({
   const [responseText, setResponseText] = useState(caseData?.intelligence?.generatedResponse || "");
   const [toastMessage, setToastMessage] = useState(null);
   const [showAddEvidenceModal, setShowAddEvidenceModal] = useState(false);
-  const [newEvidenceName, setNewEvidenceName] = useState("");
+  const [newEvidenceFile, setNewEvidenceFile] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
+  const [pendingBackendCaseId, setPendingBackendCaseId] = useState(null);
+
+  const handleAnalyzeCase = async (userInputs) => {
+    setIsAnalyzing(true);
+    setAnalysisError('');
+    try {
+      const created = pendingBackendCaseId
+        ? { case_id: pendingBackendCaseId }
+        : await ClaimPilotAPI.createCase({
+          title: userInputs.title,
+          description: userInputs.description,
+          category: 'generic'
+        });
+      setPendingBackendCaseId(created.case_id);
+      await ClaimPilotAPI.uploadDocuments(created.case_id, userInputs.uploadedFiles);
+      const analysis = await ClaimPilotAPI.analyzeCase(created.case_id);
+      const score = await ClaimPilotAPI.scoreCase(created.case_id);
+      const response = await ClaimPilotAPI.generateCaseResponse(created.case_id, {
+        recipient_name: userInputs.companyName,
+        sender_name: userInputs.claimantName,
+        tone: 'formal'
+      });
+      const uploadedDocuments = userInputs.uploadedFiles.map(file => ({
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+      }));
+      const generated = toDashboardCase({ ...userInputs, documents: uploadedDocuments }, created.case_id, analysis, score, response);
+      setActiveCase(generated);
+      setCompanyName(userInputs.companyName);
+      setClaimantName(userInputs.claimantName);
+      setResponseText(generated.intelligence.generatedResponse);
+      setPendingBackendCaseId(null);
+      if (onCaseUpdate) onCaseUpdate(generated);
+      onNavigate('investigation');
+    } catch (error) {
+      setAnalysisError(error.message || 'The case could not be analyzed. Check the API connection and uploaded file types.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -87,9 +226,22 @@ ${responseText}
     showToast('Audit Dossier downloaded successfully!');
   };
 
-  const handleToneChange = (tone) => {
+  const handleToneChange = async (tone) => {
     if (!activeCase) return;
     setResponseTone(tone);
+    if (activeCase.backendCaseId) {
+      try {
+        const response = await ClaimPilotAPI.generateCaseResponse(activeCase.backendCaseId, {
+          recipient_name: companyName,
+          sender_name: claimantName,
+          tone: tone === 'formal' ? 'formal' : 'firm_polite'
+        });
+        setResponseText(response.full_text);
+      } catch (error) {
+        showToast(error.message || 'Response generation failed.');
+      }
+      return;
+    }
     const intel = activeCase.intelligence;
     if (tone === 'formal') {
       setResponseText(intel.generatedResponse.replace(`Dear ${companyName || 'Company'}`, `Attention: Formal Legal & Dispute Bureau, ${companyName || 'Company'}`));
@@ -104,63 +256,50 @@ ${responseText}
   // Resolve a missing evidence item dynamically
   const handleResolveMissingEvidence = (missingItem) => {
     if (!activeCase) return;
-    const updatedDocs = [
-      ...activeCase.documents,
-      {
-        id: `doc-${Date.now()}`,
-        name: `${missingItem.name.replace(/\s+/g, '_')}.pdf`,
-        size: "1.8 MB",
-        type: "pdf",
-        summary: `User provided to resolve: ${missingItem.name}`
-      }
-    ];
-
-    const updatedCase = analyzeUserCase({
-      title: activeCase.title,
-      description: activeCase.description,
-      companyName,
-      claimantName,
-      claimId,
-      documents: updatedDocs
-    });
-
-    setActiveCase(updatedCase);
-    setResponseText(updatedCase.intelligence.generatedResponse);
-    if (onCaseUpdate) onCaseUpdate(updatedCase);
-    showToast(`✓ Resolved "${missingItem.name}". Strength score updated!`);
+    setShowAddEvidenceModal(true);
+    showToast(`Attach the actual file for "${missingItem.name}" to reanalyze it.`);
   };
 
   // Add custom evidence document to active case
-  const handleAddCustomEvidence = (e) => {
+  const handleAddCustomEvidence = async (e) => {
     e.preventDefault();
-    if (!newEvidenceName.trim() || !activeCase) return;
+    if (!newEvidenceFile || !activeCase) return;
+    if (!activeCase.backendCaseId) {
+      showToast('Create a case with source files to analyze additional evidence.');
+      return;
+    }
 
-    const updatedDocs = [
-      ...activeCase.documents,
-      {
-        id: `doc-${Date.now()}`,
-        name: newEvidenceName.includes('.') ? newEvidenceName : `${newEvidenceName}.pdf`,
-        size: "2.0 MB",
-        type: newEvidenceName.toLowerCase().includes("jpg") || newEvidenceName.toLowerCase().includes("png") ? "jpg" : "pdf",
-        summary: "User added evidence document"
-      }
-    ];
-
-    const updatedCase = analyzeUserCase({
-      title: activeCase.title,
-      description: activeCase.description,
-      companyName,
-      claimantName,
-      claimId,
-      documents: updatedDocs
-    });
-
-    setActiveCase(updatedCase);
-    setResponseText(updatedCase.intelligence.generatedResponse);
-    setNewEvidenceName("");
-    setShowAddEvidenceModal(false);
-    if (onCaseUpdate) onCaseUpdate(updatedCase);
-    showToast(`Added evidence: ${newEvidenceName}`);
+    setIsAnalyzing(true);
+    try {
+      await ClaimPilotAPI.uploadDocuments(activeCase.backendCaseId, [newEvidenceFile]);
+      const analysis = await ClaimPilotAPI.analyzeCase(activeCase.backendCaseId);
+      const score = await ClaimPilotAPI.scoreCase(activeCase.backendCaseId);
+      const response = await ClaimPilotAPI.generateCaseResponse(activeCase.backendCaseId, {
+        recipient_name: companyName,
+        sender_name: claimantName,
+        tone: responseTone === 'formal' ? 'formal' : 'firm_polite'
+      });
+      const generated = toDashboardCase({
+        title: activeCase.title,
+        description: activeCase.description,
+        companyName,
+        claimantName,
+        documents: [...activeCase.documents, {
+          name: newEvidenceFile.name,
+          size: `${(newEvidenceFile.size / (1024 * 1024)).toFixed(1)} MB`
+        }]
+      }, activeCase.backendCaseId, analysis, score, response);
+      setActiveCase(generated);
+      setResponseText(generated.intelligence.generatedResponse);
+      setNewEvidenceFile(null);
+      setShowAddEvidenceModal(false);
+      if (onCaseUpdate) onCaseUpdate(generated);
+      showToast(`Analyzed ${newEvidenceFile.name}.`);
+    } catch (error) {
+      showToast(error.message || 'The evidence could not be analyzed.');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const intel = activeCase?.intelligence;
@@ -304,15 +443,10 @@ ${responseText}
         {currentView === 'create-case' && (
           <UploadBox
             onBack={() => onNavigate('landing')}
-            onAnalyze={(userInputs) => {
-              const generated = analyzeUserCase(userInputs);
-              setActiveCase(generated);
-              setCompanyName(userInputs.companyName);
-              setClaimantName(userInputs.claimantName);
-              setResponseText(generated.intelligence.generatedResponse);
-              if (onCaseUpdate) onCaseUpdate(generated);
-              onNavigate('investigation');
-            }}
+            onAnalyze={handleAnalyzeCase}
+            onFormEdit={() => setAnalysisError('')}
+            isAnalyzing={isAnalyzing}
+            analysisError={analysisError}
           />
         )}
 
@@ -743,14 +877,12 @@ ${responseText}
               Add Evidence Document
             </h3>
             <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '16px' }}>
-              Enter document title (e.g. Technician_Bench_Photos.jpg, Intake_Checklist.pdf):
+              Select the evidence file to upload and analyze:
             </p>
             <input
-              type="text"
+              type="file"
               className="form-input"
-              value={newEvidenceName}
-              onChange={(e) => setNewEvidenceName(e.target.value)}
-              placeholder="e.g. Independent_Diagnostic_Report.pdf"
+              onChange={(e) => setNewEvidenceFile(e.target.files?.[0] || null)}
               style={{ marginBottom: '20px' }}
               autoFocus
             />
@@ -758,8 +890,8 @@ ${responseText}
               <button type="button" className="btn btn-secondary" onClick={() => setShowAddEvidenceModal(false)}>
                 Cancel
               </button>
-              <button type="button" className="btn btn-primary" onClick={handleAddCustomEvidence}>
-                Upload & Recalculate
+              <button type="button" className="btn btn-primary" onClick={handleAddCustomEvidence} disabled={isAnalyzing || !newEvidenceFile}>
+                {isAnalyzing ? 'Analyzing...' : 'Upload & Recalculate'}
               </button>
             </div>
           </div>

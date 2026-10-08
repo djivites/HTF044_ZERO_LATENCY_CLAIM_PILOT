@@ -72,11 +72,10 @@ graph TD
 
 | Category | Technologies |
 | -------- | ------------ |
-| Frontend | Vanilla Modern JavaScript (ES Modules), HTML5 Semantic Architecture, Custom Responsive Design System (CSS3 Tokens & Glassmorphism) |
-| Framework Ready | Vite + React 18 component scaffolding in `frontend/src/` |
+| Frontend | React 18, Vite, JavaScript, responsive CSS |
 | Backend | Python (FastAPI / Uvicorn), Pydantic schemas in `backend/` |
-| AI / ML Services | Multimodal OCR, Entity Extraction & Graph Linking |
-| Data Contract | RESTful JSON API with automatic offline mock fallback |
+| Analysis | Gemma-backed extraction with rule-based extraction fallback; deterministic evidence graph and scoring services |
+| Data Contract | REST API under `/api/v1`; explicit sample cases remain available in the frontend |
 
 ---
 
@@ -84,35 +83,41 @@ graph TD
 
 ### Prerequisites
 - Any modern web browser (Chrome, Edge, Firefox, Safari)
-- Optional: Python 3.10+ (for backend) or Node.js 18+ (for Vite dev server)
+- Python 3.10+ and Node.js 18+
+
+### Running the Backend
+
+From the repository root:
+
+```bash
+python -m pip install -r requirements.txt
+python -m uvicorn backend.main:app --reload --port 8000
+```
+
+The API documentation is available at `http://localhost:8000/docs`. Set `GEMMA_API_KEY` in the environment or a local `.env` file to enable Gemma-backed extraction; rule-based extraction fallbacks are used when the model is unavailable.
 
 ### Running the Frontend
 
-The frontend is completely self-contained and can be opened directly or served via any static HTTP server:
-
 ```bash
-# Option 1: Direct browser launch
-# Open frontend/index.html directly in any browser
-
-# Option 2: Using python static server
-cd frontend
-python -m http.server 3000
-# Visit http://localhost:3000 in your browser
-
-# Option 3: Using npm / Vite (if Node.js is installed)
 cd frontend
 npm install
 npm run dev
 ```
 
-### Backend Integration Contract
+Vite serves the React application at `http://localhost:3000`. The default backend origin is `http://localhost:8000`; set `window.CLAIM_PILOT_API_URL` before the frontend module loads to use a different backend origin.
 
-The frontend includes an adapter in `frontend/js/api.js` that points to `http://localhost:8000/api`. When the backend is offline, the frontend automatically falls back to interactive demo data. Once the backend endpoints are live, they will seamlessly connect:
+### API Contract
 
-- `POST /api/cases` — Create a case
-- `POST /api/cases/{id}/documents` — Ingest evidence files
-- `GET /api/cases/{id}/analysis` — Return case intelligence & contradiction analysis
-- `POST /api/cases/{id}/generate-response` — Generate formal dispute response
+The React case workflow uses the endpoints below. Uploads must be actual supported files; entering a filename alone does not create analyzed evidence.
+
+- `POST /api/v1/cases/` — Create a case
+- `POST /api/v1/cases/{id}/documents` — Upload and extract documents
+- `POST /api/v1/cases/{id}/analyze` — Extract claims, evidence and events; build graph and timeline
+- `POST /api/v1/cases/{id}/score` — Return the evidence score, missing evidence and contradiction candidates
+- `POST /api/v1/cases/{id}/response` — Generate an evidence-bounded response letter
+- `POST /api/v1/analysis/score`, `/contradictions`, `/response` — Standalone typed analysis endpoints
+
+Document text extraction currently supports PDF, DOCX, TXT, Markdown and JSON. Contradiction detection is a conservative lexical heuristic, not semantic or legal adjudication. Extracted quotes are marked unverified, so they are surfaced as candidates and excluded from evidence scoring and quote-backed letter drafting unless verified source data is supplied. Scores are informational and are not probabilities of success or legal advice.
 
 ---
 

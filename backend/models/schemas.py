@@ -1,11 +1,12 @@
-<<<<<<< HEAD
 from __future__ import annotations
 
 from datetime import date as Date
-from typing import Literal
+from decimal import Decimal
+from typing import Dict, Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+# ─── Literal types ────────────────────────────────────────────────────────────
 Severity = Literal["high", "medium", "low"]
 EvidenceStrength = Literal["high", "medium", "low"]
 Favors = Literal["user", "company", "neutral"]
@@ -34,6 +35,7 @@ DocType = Literal[
 DocStatus = Literal["pending", "extracting", "done", "failed"]
 
 
+# ─── Core domain models (used by scoring_service & response_service) ──────────
 class QuoteRef(BaseModel):
     doc_id: str
     page: int
@@ -174,10 +176,9 @@ class CaseAnalysis(BaseModel):
     rule_results: list[RuleResult] = Field(default_factory=list)
     score: ScoreResult | None = None
     missing_evidence: list[MissingEvidence] = Field(default_factory=list)
-=======
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
 
+
+# ─── API-layer models (used by the FastAPI routers) ──────────────────────────
 class DocumentMetadata(BaseModel):
     filename: str
     extension: str
@@ -186,6 +187,7 @@ class DocumentMetadata(BaseModel):
     word_count: int = 0
     extra: Dict[str, Any] = Field(default_factory=dict)
 
+
 class ProcessedDocument(BaseModel):
     document_id: str
     filename: str
@@ -193,12 +195,14 @@ class ProcessedDocument(BaseModel):
     source: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
-class Claim(BaseModel):
+
+class ClaimItem(BaseModel):
     claim_id: str
     claim: str
     document_id: str
     source: str
     confidence: float = 1.0
+
 
 class EvidenceItem(BaseModel):
     evidence_id: str
@@ -206,6 +210,7 @@ class EvidenceItem(BaseModel):
     document_id: str
     source: str
     confidence: float = 1.0
+
 
 class EventItem(BaseModel):
     event_id: str
@@ -215,21 +220,25 @@ class EventItem(BaseModel):
     source: str
     confidence: float = 1.0
 
+
 class GraphNode(BaseModel):
     id: str
-    type: str  # "document", "claim", "evidence", "event"
+    type: str
     label: Optional[str] = None
     properties: Dict[str, Any] = Field(default_factory=dict)
+
 
 class GraphRelationship(BaseModel):
     source: str
     target: str
-    type: str  # DOCUMENT_CONTAINS_CLAIM, DOCUMENT_CONTAINS_EVIDENCE, DOCUMENT_CONTAINS_EVENT, CLAIM_SUPPORTED_BY_EVIDENCE, CLAIM_ASSOCIATED_WITH_EVENT, EVIDENCE_ASSOCIATED_WITH_EVENT
+    type: str
     properties: Dict[str, Any] = Field(default_factory=dict)
+
 
 class EvidenceGraph(BaseModel):
     nodes: List[Dict[str, Any]]
     relationships: List[Dict[str, Any]]
+
 
 class TimelineEvent(BaseModel):
     event_id: str
@@ -239,4 +248,3 @@ class TimelineEvent(BaseModel):
     document_id: Optional[str] = None
     raw_date: Optional[str] = None
     is_date_valid: bool = True
->>>>>>> feature/claimpilot-core-services

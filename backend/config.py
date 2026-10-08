@@ -1,4 +1,12 @@
-<<<<<<< HEAD
+import os
+from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file if available
+load_dotenv()
+
+
+# ─── Scoring constants (used by scoring_service & response_service) ──────────
 DOC_RELIABILITY = {
     "inspection_report": 1.0,
     "warranty_terms": 0.95,
@@ -13,19 +21,19 @@ DOC_RELIABILITY = {
 DEFAULT_RELIABILITY = 0.4
 SEVERITY_WEIGHT = {"high": 1.0, "medium": 0.6, "low": 0.3}
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
-SCORE_WEIGHTS = {"support": 0.35, "contradiction": 0.30, "completeness": 0.20, "timeline": 0.15}
+SCORE_WEIGHTS = {
+    "support": 0.35,
+    "contradiction": 0.30,
+    "completeness": 0.20,
+    "timeline": 0.15,
+}
 CONTRADICTION_SATURATION = 3.0
 SCORE_BANDS = [(80, "Strong"), (60, "Moderate"), (40, "Mixed"), (0, "Weak")]
 MAX_FINDINGS_IN_LETTER = 5
 MAX_LETTER_RETRIES = 2
-=======
-import os
-from typing import Optional
-from dotenv import load_dotenv
 
-# Load environment variables from .env file if available
-load_dotenv()
 
+# ─── Application settings ────────────────────────────────────────────────────
 class Settings:
     # Gemma AI configuration
     GEMMA_API_KEY: str = os.getenv("GEMMA_API_KEY", "")
@@ -33,7 +41,6 @@ class Settings:
     GEMMA_API_URL: Optional[str] = os.getenv("GEMMA_API_URL", None)
 
     # Embedding & Vector Database configuration
-    # 1024-dim model matching the Pinecone index dimension
     EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "BAAI/bge-large-en-v1.5")
     HUGGINGFACE_API_KEY: str = os.getenv("HUGGINGFACE_API_KEY", "")
     HUGGINGFACE_EMBEDDING_MODEL: str = os.getenv("HUGGINGFACE_EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
@@ -48,5 +55,5 @@ class Settings:
     MAX_CHUNK_SIZE: int = int(os.getenv("MAX_CHUNK_SIZE", "500"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "50"))
 
+
 settings = Settings()
->>>>>>> feature/claimpilot-core-services

@@ -5,6 +5,7 @@ import '../css/style.css';
 
 const rootEl = document.getElementById('root');
 if (rootEl) {
+  window.__CLAIMPILOT_REACT_APP__ = true;
   // Hide static fallback elements when React mounts
   const staticLanding = document.getElementById('view-landing');
   const staticApp = document.getElementById('view-app-shell');

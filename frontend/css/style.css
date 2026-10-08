@@ -1592,40 +1592,64 @@ body {
 .graph-canvas-container {
   background: #f8fafc;
   border: 1px solid var(--light-border);
-  border-radius: var(--radius-xl);
-  height: 600px;
+  border-radius: var(--radius-lg);
   position: relative;
-  overflow: hidden;
+  overflow: auto;
   box-shadow: var(--shadow-md);
   user-select: none;
 }
 
 .graph-controls {
-  position: absolute;
-  top: 16px;
-  left: 16px;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  z-index: 20;
+  margin-bottom: 12px;
+}
+
+.graph-surface {
+  position: relative;
+  min-width: 100%;
+}
+
+.graph-stage-title {
+  position: absolute;
+  top: 22px;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.graph-empty-state {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  color: #64748b;
+  font-size: 0.9rem;
 }
 
 /* Graph Nodes Styling */
 .graph-node {
   position: absolute;
   background: #ffffff;
-  border-radius: var(--radius-lg);
-  padding: 16px 20px;
+  border-radius: 8px;
+  padding: 12px 14px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
-  min-width: 220px;
-  max-width: 260px;
+  width: 238px;
+  height: 148px;
+  overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
   z-index: 10;
 }
 
 .graph-node:hover {
-  transform: translateY(-4px);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+}
+
+.graph-node:focus-visible {
+  outline: 3px solid #4f46e5;
+  outline-offset: 2px;
 }
 
 .node-claim {
@@ -1662,8 +1686,9 @@ body {
   font-size: 0.8rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0;
   margin-bottom: 6px;
+  overflow-wrap: anywhere;
 }
 
 .node-body {
@@ -1671,6 +1696,10 @@ body {
   font-weight: 500;
   color: #1e293b;
   line-height: 1.4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
 
 .node-sub {

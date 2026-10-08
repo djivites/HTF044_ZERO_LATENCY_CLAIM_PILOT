@@ -9,6 +9,13 @@ STOP_WORDS: Set[str] = {
     "is", "it", "its", "of", "on", "that", "the", "to", "was", "were", "will", "with",
     "there", "no", "or", "been", "this", "during", "which", "official", "reported"
 }
+KEYWORD_NORMALIZATIONS = {
+    "failed": "fail",
+    "failing": "fail",
+    "fails": "fail",
+    "failure": "fail",
+    "failures": "fail",
+}
 
 
 def _extract_keywords(text: str) -> Set[str]:
@@ -16,7 +23,7 @@ def _extract_keywords(text: str) -> Set[str]:
     if not text:
         return set()
     words = re.findall(r"\b[a-zA-Z0-9]{3,}\b", text.lower())
-    return {w for w in words if w not in STOP_WORDS}
+    return {KEYWORD_NORMALIZATIONS.get(word, word) for word in words if word not in STOP_WORDS}
 
 
 def _are_texts_related(text1: str, text2: str, min_shared: int = 1) -> bool:
@@ -235,7 +242,7 @@ def create_evidence_graph(
             evt_text = str(event.get("event", ""))
 
             if ev_id and event_id and e_doc and ev_doc and e_doc == ev_doc:
-                if _are_texts_related(e_text, evt_text, min_shared=2):
+                if _are_texts_related(e_text, evt_text, min_shared=1):
                     rel_key = (ev_id, event_id, "EVIDENCE_ASSOCIATED_WITH_EVENT")
                     if rel_key not in seen_rel_keys:
                         seen_rel_keys.add(rel_key)

@@ -728,6 +728,8 @@ window.viewDocumentMock = (name) => {
  * Event Listeners Initializer
  */
 document.addEventListener('DOMContentLoaded', () => {
+  if (window.__CLAIMPILOT_REACT_APP__) return;
+
   // Nav items click handler
   DOM.sidebarNavs.forEach(nav => {
     nav.addEventListener('click', (e) => {

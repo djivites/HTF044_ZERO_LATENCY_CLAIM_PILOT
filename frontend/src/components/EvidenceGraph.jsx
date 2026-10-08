@@ -1,5 +1,20 @@
 import React, { useState } from 'react';
 
+const NODE_WIDTH = 238;
+const NODE_HEIGHT = 148;
+const COLUMN_GAP = 76;
+const ROW_GAP = 34;
+const LEFT_PADDING = 24;
+const TOP_PADDING = 66;
+const STAGES = ['Documents', 'Claims', 'Evidence', 'Events'];
+
+function getStage(node) {
+  if (node.type === 'document') return 0;
+  if (node.type === 'claim') return 1;
+  if (node.type === 'event') return 3;
+  return 2;
+}
+
 /**
  * EvidenceGraph Component
  * Interactive visual canvas rendering connected claims, rules, reports, and photos.
@@ -14,15 +29,23 @@ export default function EvidenceGraph({
 
   const { nodes = [], edges = [] } = graphData;
 
+  const stages = STAGES.map(() => []);
+  nodes.forEach(node => stages[getStage(node)].push(node));
+  const maxRows = Math.max(1, ...stages.map(stage => stage.length));
+  const surfaceWidth = LEFT_PADDING * 2 + STAGES.length * NODE_WIDTH + (STAGES.length - 1) * COLUMN_GAP;
+  const surfaceHeight = TOP_PADDING + maxRows * NODE_HEIGHT + (maxRows - 1) * ROW_GAP + 30;
+  const positionedNodes = stages.flatMap((stage, stageIndex) => stage.map((node, rowIndex) => ({
+    ...node,
+    x: LEFT_PADDING + stageIndex * (NODE_WIDTH + COLUMN_GAP),
+    y: TOP_PADDING + rowIndex * (NODE_HEIGHT + ROW_GAP),
+    stage: stageIndex
+  })));
+  const nodeMap = Object.fromEntries(positionedNodes.map(node => [node.id, node]));
+
   const filteredEdges = edges.filter(edge => {
     if (filterMode === 'conflicts') return edge.type === 'contradicts';
     if (filterMode === 'supporting') return edge.type === 'supports';
     return true;
-  });
-
-  const nodeMap = {};
-  nodes.forEach(n => {
-    nodeMap[n.id] = n;
   });
 
   return (
@@ -47,12 +70,7 @@ export default function EvidenceGraph({
         </div>
       )}
 
-      <div
-        className="graph-canvas-container"
-        style={{ height: height, position: 'relative', overflow: 'hidden' }}
-      >
-        {/* Controls */}
-        <div className="graph-controls">
+      <div className="graph-controls">
           <button
             className={`btn btn-sm ${filterMode === 'all' ? 'btn-primary' : 'btn-secondary'}`}
             onClick={() => setFilterMode('all')}
@@ -71,21 +89,36 @@ export default function EvidenceGraph({
           >
             🛡️ Supports Only
           </button>
-        </div>
+      </div>
 
+      <div className="graph-canvas-container" style={{ height }}>
+        {positionedNodes.length === 0 ? (
+          <div className="graph-empty-state">No extracted evidence graph is available yet.</div>
+        ) : (
+        <div className="graph-surface" style={{ width: surfaceWidth, height: surfaceHeight }}>
+          {STAGES.map((stage, index) => (
+            <div
+              className="graph-stage-title"
+              key={stage}
+              style={{ left: LEFT_PADDING + index * (NODE_WIDTH + COLUMN_GAP), width: NODE_WIDTH }}
+            >
+              {stage}
+            </div>
+          ))}
         {/* SVG Directional Edge Layer */}
         <svg
           className="graph-svg-layer"
-          style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}
+          width={surfaceWidth}
+          height={surfaceHeight}
         >
           <defs>
-            <marker id="marker-contradicts" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <marker id={`marker-contradicts-${isDedicatedPage ? 'page' : 'inline'}`} viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#ef4444" />
             </marker>
-            <marker id="marker-supports" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <marker id={`marker-supports-${isDedicatedPage ? 'page' : 'inline'}`} viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#10b981" />
             </marker>
-            <marker id="marker-related" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <marker id={`marker-related-${isDedicatedPage ? 'page' : 'inline'}`} viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 1.5 L 10 5 L 0 8.5 z" fill="#3b82f6" />
             </marker>
           </defs>
@@ -95,10 +128,14 @@ export default function EvidenceGraph({
             const to = nodeMap[edge.to];
             if (!from || !to) return null;
 
-            const x1 = from.x + 110;
-            const y1 = from.y + 40;
-            const x2 = to.x + 110;
-            const y2 = to.y + 40;
+            const isForward = from.x <= to.x;
+            const x1 = from.x + (isForward ? NODE_WIDTH : 0);
+            const y1 = from.y + NODE_HEIGHT / 2;
+            const x2 = to.x + (isForward ? 0 : NODE_WIDTH);
+            const y2 = to.y + NODE_HEIGHT / 2;
+            const bend = Math.max(36, Math.abs(x2 - x1) * 0.42);
+            const controlX1 = x1 + (isForward ? bend : -bend);
+            const controlX2 = x2 - (isForward ? bend : -bend);
 
             const color =
               edge.type === 'contradicts'
@@ -109,33 +146,22 @@ export default function EvidenceGraph({
 
             return (
               <g key={`edge-${idx}`}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
+                <path
+                  d={`M ${x1} ${y1} C ${controlX1} ${y1}, ${controlX2} ${y2}, ${x2} ${y2}`}
                   stroke={color}
                   strokeWidth={edge.type === 'contradicts' ? '3' : '2'}
+                  fill="none"
                   strokeDasharray={edge.type === 'contradicts' ? '6,4' : undefined}
-                  markerEnd={`url(#marker-${edge.type})`}
+                  markerEnd={`url(#marker-${edge.type}-${isDedicatedPage ? 'page' : 'inline'})`}
                 />
-                <text
-                  x={(x1 + x2) / 2}
-                  y={(y1 + y2) / 2 - 6}
-                  fill={color}
-                  fontSize="10"
-                  fontWeight="700"
-                  textAnchor="middle"
-                >
-                  {edge.relation}
-                </text>
+                <title>{edge.relation}</title>
               </g>
             );
           })}
         </svg>
 
         {/* Nodes Layer */}
-        {nodes.map(node => {
+        {positionedNodes.map(node => {
           let nodeClass = 'node-default';
           let icon = '📄';
           if (node.type === 'claim') {
@@ -157,10 +183,19 @@ export default function EvidenceGraph({
               style={{
                 left: `${node.x}px`,
                 top: `${node.y}px`,
-                borderWidth: selectedNode?.id === node.id ? '3px' : '2px',
-                transform: selectedNode?.id === node.id ? 'scale(1.04)' : undefined
+                borderWidth: selectedNode?.id === node.id ? '3px' : '2px'
               }}
               onClick={() => setSelectedNode(node)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedNode(node);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-pressed={selectedNode?.id === node.id}
+              title={node.text}
             >
               <div className="node-header">
                 <span>{icon}</span>
@@ -205,7 +240,7 @@ export default function EvidenceGraph({
                 Cross-Verification Status
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#10b981' }}>
-                <span>✓</span> Verified against service intake timestamps
+                <span>•</span> Automated extraction; check the original source
               </div>
             </div>
 
@@ -217,6 +252,8 @@ export default function EvidenceGraph({
               View Document Source PDF →
             </button>
           </div>
+        )}
+        </div>
         )}
       </div>
     </div>

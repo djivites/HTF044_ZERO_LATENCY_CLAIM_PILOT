@@ -82,9 +82,10 @@ def test_huggingface_api_embedding_mock(monkeypatch):
 
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.json.return_value = [[0.1, 0.2, 0.3]]
+    expected_embedding = [0.1] * settings.PINECONE_DIMENSION
+    mock_response.json.return_value = [expected_embedding]
 
     with monkeypatch.context() as m:
         m.setattr("requests.post", lambda *args, **kwargs: mock_response)
         embedding = _get_embedding("Sample text for HF embedding")
-        assert embedding == [0.1, 0.2, 0.3]
+        assert embedding == expected_embedding

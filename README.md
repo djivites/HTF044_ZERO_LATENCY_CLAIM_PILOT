@@ -1,182 +1,123 @@
-# [Project Name]
+# ClaimPilot
 
-> [One-line description of the project and what it does.]
+> **Turn messy evidence into an auditable case.**  
+> AI-powered evidence graph intelligence, contradiction discovery, and automated dispute resolution for warranties, insurance, rental deposits, and contractor disputes.
 
 ## Team
 
-**Team Name:** [Team Name]
+**Team Name:** ClaimPilot Team
 
+| Member | Contribution |
+| ------ | ------------ |
+| Team Member 1 | Frontend Architecture, Interactive Evidence Graph, UI Design System |
+| Team Member 2 | Backend API Development, Document Extraction Pipeline, AI Services |
 
-| Member | Contribution   |
-| ------ | -------------- |
-| [Name] | [Contribution] |
-| [Name] | [Contribution] |
-| [Name] | [Contribution] |
-| [Name] | [Contribution] |
-
+---
 
 ## Problem Statement
 
 ### The Problem
-
-[Describe the problem being addressed, who is affected by it, and the context in which it occurs.]
+When consumers face wrongful claim rejections—such as warranty denials ("customer-induced physical damage"), withheld apartment security deposits, or auto repair disputes—they are forced to sift through complex PDFs, technical diagnostic sheets, receipts, and emails. Companies count on asymmetrical information, hoping claimants will give up. Simple chat LLMs lack structural auditability, hallucinate details, and cannot visually expose contradictions between what a company claims and what authorized reports actually document.
 
 ### Why We Chose This Problem
+Dispute resolution requires verifiable, auditable facts rather than conversational text. By constructing an interconnected **Evidence Graph**, consumers and investigators can immediately isolate smoking-gun contradictions (e.g., company asserts "impact damage", but their own authorized repair technician recorded "no external impact marks observed") and generate ironclad dispute letters.
 
-[Explain why the team selected this problem and why solving it is important.]
+---
 
 ## Solution
 
-[Describe the proposed solution and how it addresses the problem.]
+ClaimPilot is an end-to-end evidence intelligence platform structured around 6 dedicated operational interfaces:
 
-### Key Features
+### 6 Core Interfaces
 
-- [Feature 1]
-- [Feature 2]
-- [Feature 3]
-- [Feature 4]
+1. **🏠 Landing / Home:** Immediate value proposition, animated evidence graph visualization, and preset dispute categories (Warranty, Insurance, Rental, Contractor).
+2. **📤 Create Case / Upload Evidence:** Multi-format document ingestion (PDF, DOCX, Images, Emails) with drag-and-drop file processing and fast-load demo cases.
+3. **🔍 Case Investigation / Processing:** Real-time animated pipeline displaying live document parsing, claim extraction, evidence linking, contradiction searching, and timeline compilation.
+4. **🧠 Case Intelligence Dashboard ⭐:** The primary intelligence workspace featuring:
+   - Case Strength Score (e.g. 82/100)
+   - Supporting vs. Company Evidence breakdown
+   - Critical Contradiction detection metrics
+   - Missing Evidence alerts
+   - Tabbed deep dives: Overview, Evidence, Timeline, Contradictions, and Mini Evidence Graph.
+5. **🕸️ Evidence Graph:** Dedicated visual canvas demonstrating directional links between claims, diagnostic reports, invoices, and photos categorized by **Supports**, **Contradicts**, and **Related To**, complete with an auditable node inspector.
+6. **✉️ Response & Action Center:** Actionable dispute engine providing strategic recommendations, generated formal contest letters with tone selection (Formal, Firm, Concise), export tools (Copy, Download, Email), and a prioritized missing evidence checklist.
+
+---
 
 ## Innovation and Differentiation
 
-[Explain what is innovative about the approach and how it differs from existing or conventional solutions.]
+- **Structured Evidence Graphs over Chatbots:** Rather than a simple chat interface, ClaimPilot structures disparate claims and documents into a directional graph showing causal relations and direct contradictions.
+- **Auditable Quotes & Source Verification:** Every node and contradiction points directly to the exact file source and section (e.g. *Repair_Report.pdf Section 3* vs. *Company_Response.pdf Page 1*).
+- **Quantified Case Strength:** Algorithmic score assessing claim viability based on conflicting statements, tamper seal status, and documentation completeness.
+
+---
 
 ## Technical Implementation
 
 ### Architecture
 
-[Add the system architecture or workflow Mermaid diagram here.]
+```mermaid
+graph TD
+    A[User Evidence: PDFs, Images, Emails] --> B[Upload & Ingestion Layer]
+    B --> C[AI Claim & Fact Extractor]
+    C --> D[Contradiction & Conflict Engine]
+    D --> E[Knowledge & Evidence Graph]
+    E --> F[Case Intelligence Dashboard]
+    E --> G[Visual Interactive Graph Canvas]
+    F --> H[Response & Dispute Letter Generator]
+    H --> I[Auditable PDF / TXT Dossier Export]
+```
 
 ### Technology Stack
 
+| Category | Technologies |
+| -------- | ------------ |
+| Frontend | Vanilla Modern JavaScript (ES Modules), HTML5 Semantic Architecture, Custom Responsive Design System (CSS3 Tokens & Glassmorphism) |
+| Framework Ready | Vite + React 18 component scaffolding in `frontend/src/` |
+| Backend | Python (FastAPI / Uvicorn), Pydantic schemas in `backend/` |
+| AI / ML Services | Multimodal OCR, Entity Extraction & Graph Linking |
+| Data Contract | RESTful JSON API with automatic offline mock fallback |
 
-| Category        | Technologies                |
-| --------------- | --------------------------- |
-| Frontend        | [Technologies / N/A]        |
-| Backend         | [Technologies / N/A]        |
-| Database        | [Technologies / N/A]        |
-| AI / ML         | [Models / frameworks / N/A] |
-| Infrastructure  | [Technologies / N/A]        |
-| APIs / Services | [Services / N/A]            |
-
-
-If a category or technology is not implemented in the project, specify `N/A` instead of leaving the field blank.
-
-### How It Works
-
-[Explain the major components of the system and how they interact.]
-
-### Technical Decisions
-
-[Explain important architectural, algorithmic, or engineering decisions made during development.]
-
-## Implementation During the Hackathon
-
-[Describe what the team built during the Hack Day and the major functionality or components completed during the event.]
-
-### Team Contributions
-
-- **[Member Name]:** [Contribution]
-- **[Member Name]:** [Contribution]
-- **[Member Name]:** [Contribution]
-- **[Member Name]:** [Contribution]
-
-## Working Application
-
-**Live Application:** [Live URL]
-
-[Briefly explain how the deployed application can be accessed and what functionality can be tested.]
-
-The submitted application should be functional and accessible through the provided link where applicable.
-
-## Demo Video
-
-**Demo Video:** [Video URL]
-
-[Provide a short demonstration of the working project, covering the main user flow and important functionality.]
-
-## Open Source and AI Usage
-
-### AI / Models
-
-- **[Model]:** [How it is used]
-
-### Open Source Components
-
-- **[Library / Framework]:** [Purpose]
-- **[Dataset]:** [Purpose]
-- **[API / Service]:** [Purpose]
-
-[Include relevant licenses, attribution, and acknowledgements for external components.]
+---
 
 ## Setup and Usage
 
 ### Prerequisites
+- Any modern web browser (Chrome, Edge, Firefox, Safari)
+- Optional: Python 3.10+ (for backend) or Node.js 18+ (for Vite dev server)
 
-- [Requirement]
-- [Requirement]
+### Running the Frontend
 
-### Installation
-
-```bash
-git clone [repository-url]
-cd [project-directory]
-[installation-command]
-```
-
-### Environment Variables
-
-```env
-[VARIABLE_NAME]=[value]
-```
-
-
-
-### Running the Project
+The frontend is completely self-contained and can be opened directly or served via any static HTTP server:
 
 ```bash
-[run-command]
+# Option 1: Direct browser launch
+# Open frontend/index.html directly in any browser
+
+# Option 2: Using python static server
+cd frontend
+python -m http.server 3000
+# Visit http://localhost:3000 in your browser
+
+# Option 3: Using npm / Vite (if Node.js is installed)
+cd frontend
+npm install
+npm run dev
 ```
 
-### Usage
+### Backend Integration Contract
 
-[Explain the basic steps required to use the project.]
+The frontend includes an adapter in `frontend/js/api.js` that points to `http://localhost:8000/api`. When the backend is offline, the frontend automatically falls back to interactive demo data. Once the backend endpoints are live, they will seamlessly connect:
 
-## Devpost Submission
+- `POST /api/cases` — Create a case
+- `POST /api/cases/{id}/documents` — Ingest evidence files
+- `GET /api/cases/{id}/analysis` — Return case intelligence & contradiction analysis
+- `POST /api/cases/{id}/generate-response` — Generate formal dispute response
 
-**Devpost Project:** [Devpost Project URL]
-
-[Add the link to the team's Devpost submission. Ensure the Devpost project page is complete and contains the required project information, links, media, and team details.]
+---
 
 ## Credits and License
 
-### Credits
-
-[Credit libraries, frameworks, datasets, models, APIs, contributors, and other external resources used.]
-
-### License
-
-[License name and/or link.]
-
-## Submission Checklist
-
-- [ ] Project title and description added
-- [ ] All team members listed
-- [ ] Problem clearly explained
-- [ ] Reason for choosing the problem explained
-- [ ] Solution and key features documented
-- [ ] Innovation and differentiation explained
-- [ ] Architecture included
-- [ ] Technical implementation documented
-- [ ] Work completed during the hackathon documented
-- [ ] Team contributions documented
-- [ ] Working application is functional
-- [ ] Live application link added where applicable
-- [ ] Demo video added
-- [ ] AI and open-source components documented
-- [ ] Setup and usage instructions tested
-- [ ] Challenges and learnings documented
-- [ ] Devpost submission completed
-- [ ] Devpost link added
-- [ ] Credits added
-- [ ] License added
-- [ ] Repository is organized and complete
+- **Fonts:** Google Fonts (Inter)
+- **Icons:** Custom SVG icon set
+- **License:** MIT License

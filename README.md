@@ -130,6 +130,11 @@ The React case workflow uses the endpoints below. Uploads must be actual support
 Document text extraction currently supports PDF, DOCX, TXT, Markdown and JSON. Contradiction detection is a conservative lexical heuristic, not semantic or legal adjudication. Extracted quotes are marked unverified, so they are surfaced as candidates and excluded from evidence scoring and quote-backed letter drafting unless verified source data is supplied. Scores are informational and are not probabilities of success or legal advice.
 
 ---
+#### Demo Video
+https://youtu.be/31J9Tv6fMYU
+
+#### Devpost link
+https://dev.to/cbscu4aie24056/claimpilot-building-an-ai-evidence-intelligence-system-with-gemma-4-4flc
 
 ## Credits and License
 

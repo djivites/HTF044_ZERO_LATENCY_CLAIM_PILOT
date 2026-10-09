@@ -139,18 +139,39 @@ export default function CaseAnalysis({
     setIsAnalyzing(true);
     setAnalysisError('');
     try {
-      const created = pendingBackendCaseId
-        ? { case_id: pendingBackendCaseId }
-        : await ClaimPilotAPI.createCase({
+      let caseId = pendingBackendCaseId;
+      if (!caseId) {
+        const created = await ClaimPilotAPI.createCase({
           title: userInputs.title,
           description: userInputs.description,
           category: 'generic'
         });
-      setPendingBackendCaseId(created.case_id);
-      await ClaimPilotAPI.uploadDocuments(created.case_id, userInputs.uploadedFiles);
-      const analysis = await ClaimPilotAPI.analyzeCase(created.case_id);
-      const score = await ClaimPilotAPI.scoreCase(created.case_id);
-      const response = await ClaimPilotAPI.generateCaseResponse(created.case_id, {
+        caseId = created.case_id;
+        setPendingBackendCaseId(caseId);
+      }
+
+      // Try uploading documents. If the backend was restarted and the case no longer exists (404),
+      // seamlessly re-create the case and continue.
+      try {
+        await ClaimPilotAPI.uploadDocuments(caseId, userInputs.uploadedFiles);
+      } catch (uploadErr) {
+        if (uploadErr.message && uploadErr.message.includes('not found')) {
+          const recreated = await ClaimPilotAPI.createCase({
+            title: userInputs.title,
+            description: userInputs.description,
+            category: 'generic'
+          });
+          caseId = recreated.case_id;
+          setPendingBackendCaseId(caseId);
+          await ClaimPilotAPI.uploadDocuments(caseId, userInputs.uploadedFiles);
+        } else {
+          throw uploadErr;
+        }
+      }
+
+      const analysis = await ClaimPilotAPI.analyzeCase(caseId);
+      const score = await ClaimPilotAPI.scoreCase(caseId);
+      const response = await ClaimPilotAPI.generateCaseResponse(caseId, {
         recipient_name: userInputs.companyName,
         sender_name: userInputs.claimantName,
         tone: 'formal'
@@ -159,7 +180,7 @@ export default function CaseAnalysis({
         name: file.name,
         size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
       }));
-      const generated = toDashboardCase({ ...userInputs, documents: uploadedDocuments }, created.case_id, analysis, score, response);
+      const generated = toDashboardCase({ ...userInputs, documents: uploadedDocuments }, caseId, analysis, score, response);
       setActiveCase(generated);
       setCompanyName(userInputs.companyName);
       setClaimantName(userInputs.claimantName);
@@ -168,6 +189,7 @@ export default function CaseAnalysis({
       if (onCaseUpdate) onCaseUpdate(generated);
       onNavigate('investigation');
     } catch (error) {
+      setPendingBackendCaseId(null);
       setAnalysisError(error.message || 'The case could not be analyzed. Check the API connection and uploaded file types.');
     } finally {
       setIsAnalyzing(false);
@@ -326,7 +348,14 @@ ${responseText}
         </div>
 
         <div className="sidebar-action">
-          <button className="btn-new-case" onClick={() => setCurrentView('create-case')}>
+          <button
+            className="btn-new-case"
+            onClick={() => {
+              setCurrentView('create-case');
+              setAnalysisError('');
+              setPendingBackendCaseId(null);
+            }}
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -444,7 +473,10 @@ ${responseText}
           <UploadBox
             onBack={() => onNavigate('landing')}
             onAnalyze={handleAnalyzeCase}
-            onFormEdit={() => setAnalysisError('')}
+            onFormEdit={() => {
+              setAnalysisError('');
+              setPendingBackendCaseId(null);
+            }}
             isAnalyzing={isAnalyzing}
             analysisError={analysisError}
           />

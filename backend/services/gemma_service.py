@@ -2,6 +2,7 @@ import os
 import re
 import json
 import uuid
+import time
 import logging
 from typing import List, Dict, Any, Union, Optional
 
@@ -101,14 +102,15 @@ def _clean_and_parse_json(response_text: str) -> List[Dict[str, Any]]:
     return []
 
 
-def _call_gemma_api(prompt: str, _retry: bool = True) -> str:
+def _call_gemma_api(prompt: str, model_override: Optional[str] = None, _retry: bool = True) -> str:
     """
-    Call Gemma (gemma-4-31b-it) via Google GenAI SDK (google-genai).
-    Retries once on transient 5xx errors. Raises RuntimeError on permanent failure
-    so callers can distinguish a real API failure from an intentional fallback.
+    Call Gemma (gemma-4-31b-it or fallback) via Google GenAI SDK (google-genai).
+    Retries once with backoff on transient 5xx errors and tests secondary model if available.
+    Raises RuntimeError on permanent failure so callers can distinguish a real API failure
+    from an intentional fallback.
     """
     api_key = settings.GEMMA_API_KEY
-    model_name = settings.GEMMA_MODEL_NAME
+    model_name = model_override or settings.GEMMA_MODEL_NAME
 
     logger.info(f"Gemma model: {model_name}")
 
@@ -133,15 +135,30 @@ def _call_gemma_api(prompt: str, _retry: bool = True) -> str:
         text = response.text or ""
         if not text.strip():
             logger.warning(f"Gemma returned an empty response for model {model_name}.")
+        # Brief pacing to avoid rate-limit 500 spikes on rapid sequential pipeline calls
+        time.sleep(1.0)
         return text
     except Exception as e:
         err_str = str(e)
-        # Retry once on transient 5xx server errors
+        # Retry with backoff on transient 5xx server errors
         if _retry and ("500" in err_str or "503" in err_str or "502" in err_str):
             logger.warning(
-                f"Gemma API transient error ({e}). Retrying once..."
+                f"Gemma API transient error for {model_name} ({e}). Pausing 3s and retrying..."
             )
-            return _call_gemma_api(prompt, _retry=False)
+            time.sleep(3)
+            try:
+                return _call_gemma_api(prompt, model_override=model_name, _retry=False)
+            except Exception as retry_err:
+                # Reciprocal fallback between models if Google returns 500
+                fallback_target = "gemma-4-26b-a4b-it" if model_name == "gemma-4-31b-it" else "gemma-4-31b-it"
+                logger.warning(
+                    f"Primary {model_name} server endpoint failed with 500. Attempting fallback to {fallback_target}..."
+                )
+                try:
+                    return _call_gemma_api(prompt, model_override=fallback_target, _retry=False)
+                except Exception as secondary_err:
+                    logger.warning(f"Secondary model {fallback_target} attempt also failed: {secondary_err}")
+                raise retry_err from e
         raise RuntimeError(f"Gemma API call failed for model {model_name}: {e}") from e
 
 
